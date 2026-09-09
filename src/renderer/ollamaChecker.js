@@ -50,13 +50,35 @@ async function checkModelExists(url, model) {
     }
 }
 
+// 冷启动宽限期：Ollama 拉起较慢，先静默轮询一段时间，期间不弹任何错误，避免冷启动误报
+const STARTUP_GRACE_MS = 60000;   // 启动时最多等待 60 秒
+const READY_GRACE_MS   = 30000;   // 对话前最多等待 30 秒
+const HEALTH_INTERVAL_MS = 2000;  // 轮询间隔
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * 在宽限期内反复探测 Ollama 是否就绪；期间不报任何错误，避免冷启动误报。
+ * @returns {Promise<boolean>} 宽限期内就绪返回 true，超时返回 false
+ */
+async function waitForHealthy(url, graceMs) {
+    const start = Date.now();
+    while (Date.now() - start < graceMs) {
+        if (await checkOllamaHealth(url)) return true;
+        await sleep(HEALTH_INTERVAL_MS);
+    }
+    return false;
+}
+
 /**
  * 主动触发一次完整检测（启动时调用）
  */
 async function performStartupCheck() {
     const { url, model } = getOllamaConfig();
     ollamaStatus = 'checking';
-    const isHealthy = await checkOllamaHealth(url);
+    const isHealthy = await waitForHealthy(url, STARTUP_GRACE_MS);
     if (isHealthy) {
         const hasModel = await checkModelExists(url, model);
         if (!hasModel) {
@@ -97,7 +119,7 @@ async function ensureOllamaReady(forceCheck = false) {
         return checkPromise;
     }
     checkPromise = (async () => {
-        const healthy = await checkOllamaHealth(url);
+        const healthy = await waitForHealthy(url, READY_GRACE_MS);
         if (healthy) {
             ollamaStatus = 'online';
             offlineNotified = false;

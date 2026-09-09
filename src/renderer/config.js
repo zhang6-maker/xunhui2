@@ -109,9 +109,16 @@ const FESTIVALS = [
     { month: 1, day: 1, name: '元旦', greetings: ['新年快乐！新的一年也要一起加油哦~', '元旦快乐！今天适合许愿！'] },
     { month: 2, day: 14, name: '情人节', greetings: ['情人节快乐！要一直甜甜蜜蜜的呀~', '今天是情人节，送你一颗虚拟巧克力 🍫'] },
     { month: 3, day: 8, name: '妇女节', greetings: ['女神节快乐！今天你是最美的~'] },
+    { month: 3, day: 12, name: '植树节', greetings: ['植树节快乐！多种一棵树，地球更绿一点~'] },
+    { month: 4, day: 4, name: '清明', greetings: ['清明安康！记得给逝去的亲人扫墓寄托哀思~'] },
+    { month: 4, day: 5, name: '清明', greetings: ['清明安康！记得给逝去的亲人扫墓寄托哀思~'] },
     { month: 4, day: 1, name: '愚人节', greetings: ['愚人节快乐！今天我说的话可别全信哦~'] },
     { month: 5, day: 1, name: '劳动节', greetings: ['劳动节快乐！辛苦啦，好好休息一下吧~'] },
+    { month: 5, day: 4, name: '青年节', greetings: ['青年节快乐！永远年轻，永远热泪盈眶~'] },
     { month: 6, day: 1, name: '儿童节', greetings: ['儿童节快乐！谁还不是个宝宝呢~'] },
+    { month: 7, day: 1, name: '建党节', greetings: ['建党节快乐！'] },
+    { month: 8, day: 1, name: '建军节', greetings: ['建军节快乐！致敬最可爱的人~'] },
+    { month: 9, day: 10, name: '教师节', greetings: ['教师节快乐！感谢生命里的每一位老师~'] },
     { month: 10, day: 1, name: '国庆节', greetings: ['国庆快乐！假期愉快~'] },
     { month: 12, day: 25, name: '圣诞节', greetings: ['圣诞快乐！今晚会有礼物吗？🎄'] }
 ];
@@ -126,6 +133,18 @@ const LUNAR_NEW_YEAR_DATES = {
     '2030': [2,  3]
 };
 
+// ==================== 其他农历节日公历日期表（2026-2030） ====================
+// 数据来源：MoonCal(lunar-typescript 算法) / 百度百科 / 搜狗百科 / timeanddate 多源交叉核对
+// 格式：年份 -> { 节日名: [月份, 日期] }
+// 注意：农历节日每年公历日期浮动，2030 之后需重新核对补充
+const LUNAR_FESTIVALS = {
+    '2026': { '元宵': [3, 3], '端午': [6, 19], '七夕': [8, 19], '中秋': [9, 25], '重阳': [10, 18] },
+    '2027': { '元宵': [2, 20], '端午': [6, 9], '七夕': [8, 8], '中秋': [9, 15], '重阳': [10, 8] },
+    '2028': { '元宵': [2, 9], '端午': [5, 28], '七夕': [8, 26], '中秋': [10, 3], '重阳': [10, 26] },
+    '2029': { '元宵': [2, 27], '端午': [6, 16], '七夕': [8, 16], '中秋': [9, 22], '重阳': [10, 16] },
+    '2030': { '元宵': [2, 17], '端午': [6, 5], '七夕': [8, 5], '中秋': [9, 12], '重阳': [10, 5] }
+};
+
 // 导出配置
 window.CONFIG = {
     imgMap,
@@ -137,7 +156,8 @@ window.CONFIG = {
     DIARY_ACTIONS,
     FOOD_ICONS,
     EMOTION_REACTIONS,
-    FESTIVALS,            
+    FESTIVALS,
     LUNAR_NEW_YEAR_DATES,
+    LUNAR_FESTIVALS,
     ...POSITION_CONFIG
 };

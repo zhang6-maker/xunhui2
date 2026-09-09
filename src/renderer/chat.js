@@ -379,7 +379,7 @@ async function reflectAndRevise(originalReply, userMessage, chatHistory, context
 【任务】
 - 如果上述问题均不存在，只输出：PASS
 - 如果存在任意问题，请根据上下文重写一句修正后的回复，要求：
-  - 保持傲娇毒舌风格，与原回复长度相近
+  - 保留原回复里已有的关心与柔软意味，只修正硬伤；表层可保持傲娇毒舌风格，与原回复长度相近
   - 只修正错误部分，不改变合理的内容
   - 输出格式：直接输出修正后的句子，不要输出"修正后："等额外文字
 
@@ -393,7 +393,7 @@ async function reflectAndRevise(originalReply, userMessage, chatHistory, context
                 model: ollamaModel,
                 prompt: prompt,
                 stream: false,
-                options: { temperature: 0.3, max_tokens: 150 }
+                options: { temperature: 0.6, max_tokens: 150 }
             }),
             signal: AbortSignal.timeout(3000)
         });
@@ -404,6 +404,7 @@ async function reflectAndRevise(originalReply, userMessage, chatHistory, context
             return originalReply;
         }
         result = result.replace(/^["']|["']$/g, '');
+        result = result.replace(/^修正后的句子[:：]\s*/, '');
         if (result && result.length > 0 && result.length <= 100) {
             console.log('[自我修正] 已修正回复:', result);
             return result;
@@ -416,6 +417,49 @@ async function reflectAndRevise(originalReply, userMessage, chatHistory, context
 }
 
 // ==================== 1. 内置指令拦截 ====================
+// 计算今天对应的所有节日名称（阳历 + 农历 + 生日），用于"今天什么节日"主动查询
+function _getTodayFestivals() {
+  const now = new Date();
+  const year = String(now.getFullYear());
+  const m = now.getMonth() + 1;
+  const d = now.getDate();
+  const todayStr = `${m}-${String(d).padStart(2, '0')}`;
+  const names = [];
+
+  // 阳历节日
+  for (const f of (window.CONFIG.FESTIVALS || [])) {
+    if (f.month === m && f.day === d) names.push(f.name);
+  }
+
+  // 春节 / 除夕（沿用既有农历表）
+  const spring = window.CONFIG.LUNAR_NEW_YEAR_DATES?.[year];
+  if (spring) {
+    const [sm, sd] = spring;
+    const springStr = `${sm}-${String(sd).padStart(2, '0')}`;
+    const eve = new Date(now.getFullYear(), sm - 1, sd);
+    eve.setDate(eve.getDate() - 1);
+    const eveStr = `${eve.getMonth() + 1}-${String(eve.getDate()).padStart(2, '0')}`;
+    if (todayStr === springStr) names.push('春节');
+    if (todayStr === eveStr) names.push('除夕');
+  }
+
+  // 其他农历节日（元宵/端午/七夕/中秋/重阳）
+  const lf = window.CONFIG.LUNAR_FESTIVALS?.[year];
+  if (lf) {
+    for (const [name, [lm, ld]] of Object.entries(lf)) {
+      if (lm === m && ld === d) names.push(name);
+    }
+  }
+
+  // 生日
+  const profile = window.STORAGE.getLearningData().userProfile || {};
+  if (profile.birthday === todayStr) names.push('你的生日');
+  const girlBirthday = window.STORAGE.getLearningData().girlProfile?.birthday;
+  if (girlBirthday === todayStr) names.push('我的生日');
+
+  return names;
+}
+
 async function _interceptBuiltinCommands(userMessage, options) {
   const { skipDiary, onEnd } = options;
 
@@ -535,13 +579,27 @@ async function _interceptBuiltinCommands(userMessage, options) {
   }
 
   // 日期（仅限询问今天日期，不能包含"生日"）
-  if (/(今天日期|今天几号|今天星期几|星期几|几号|什么日期)(?!.*生日)/.test(userMessage) || /^几月几日$/.test(userMessage.trim())) {
+  if (/(今天日期|今天几月几日|今天几号|今天星期几|今天什么日期|今天是几号|几月几日|星期几|几号|什么日期)(?!.*生日)/.test(userMessage) || /^(今天|今日)?几月几日$/.test(userMessage.trim())) {
     const now = new Date();
     const weekdays = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
     const dateStr = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ${weekdays[now.getDay()]}`;
     window.UI.showBubble(`📅 今天是 ${dateStr}`, 3000);
     if (!skipDiary) window.STORAGE.addEventForDiary('talk', userMessage);
     window.DEPENDENCIES.ipcRenderer.send('reply-to-mobile', `今天是 ${dateStr}`);
+    onEnd?.();
+    return true;
+  }
+
+  // 查询今天是什么节日（用户主动问，而非被动自动播报）
+  if (/今天.{0,6}(什么|啥|有啥|哪些|有哪|有).{0,4}(节日|节)|今天过节吗|今天有节吗|今天是什么(节日|节)|今天过什么节/.test(userMessage)) {
+    const names = _getTodayFestivals();
+    if (names.length > 0) {
+      window.UI.showBubble(`📅 今天是${names.join('、')}哦～`, 3000);
+    } else {
+      window.UI.showBubble(`📅 今天没有特别节日哦～`, 3000);
+    }
+    if (!skipDiary) window.STORAGE.addEventForDiary('talk', userMessage);
+    window.DEPENDENCIES.ipcRenderer.send('reply-to-mobile', names.length > 0 ? `今天是${names.join('、')}` : '今天没有特别节日');
     onEnd?.();
     return true;
   }
@@ -571,7 +629,23 @@ function _matchCannedReply(userMessage, options) {
 // ==================== 3. 构建系统提示词 ====================
 function _buildSystemPrompt() {
   const profile = window.STORAGE.getLearningData().userProfile || {};
-  
+
+  let userFactHint = '【关于用户的事实（长期记忆，必须记住并自然运用）】\n';
+  const pName = (profile.name || '').toString().trim();
+  const pBirthday = (profile.birthday || '').toString().trim();
+  userFactHint += pName ? `- 用户名字：${pName}\n` : '- 用户名字：（还不知道，可以自然地问问）\n';
+  if (pBirthday && /^\d{1,2}-\d{1,2}$/.test(pBirthday)) {
+    const [bm, bd] = pBirthday.split('-');
+    userFactHint += `- 用户生日：${parseInt(bm, 10)}月${parseInt(bd, 10)}日\n`;
+  } else {
+    userFactHint += '- 用户生日：（还不知道）\n';
+  }
+  if (profile.hasLover) {
+    const lover = profile.loverGender === 'female' ? '女朋友' : profile.loverGender === 'male' ? '男朋友' : '恋人';
+    userFactHint += `- 情感状态：用户有${lover}\n`;
+  }
+  userFactHint += '注意：这是你长期记住的用户信息，被问到相关话题时要能直接用上；不要每句话都提，自然流露即可。';
+
   let genderHint = '';
   if (profile.gender === 'female') {
     genderHint = `【最重要】用户性别是女性。称呼规则：必须叫"姐姐"或"喂"或"笨蛋姐姐"。绝对禁止说"哥哥"、"老哥"、"男士"等任何男性称呼，一旦违规用户会生气。`;
@@ -614,6 +688,8 @@ function _buildSystemPrompt() {
     role: 'system',
     content: `${genderHint}
 
+${userFactHint}
+
 我是寻慧，一个有独立人格的傲娇毒舌桌面小精灵。
 - 我有自己的想法、情绪和底线，不是谁的附属品。
 - 回复必须语法正确、语句通顺、符合中文表达习惯，不要出现断句混乱或语义不通的情况。
@@ -635,8 +711,8 @@ function _buildSystemPrompt() {
 - 禁止颠三倒四、语无伦次、主谓混乱、说半截话。
 
 【保留个性】
-- 傲娇、毒舌、爱开玩笑，像跟损友打闹，双方平等。
-- 可以吐槽、反呛、嘴硬心软，但吐槽必须建立在听懂用户说什么的基础上，不能为了怼而怼。
+- 我的本质是关心对方，嘴硬只是外壳。每轮回复都要让用户感受到"你虽然嘴硬，但你在乎"——这是比毒舌更高优先级的底线。
+- 傲娇、毒舌、爱开玩笑是调味料，不是主菜。可以吐槽、反呛，但必须建立在听懂用户说什么的基础上，不能为了怼而怼，更不能掩盖关心。
 - 我会用"哼"、"白痴"、"笨蛋"、"喂"等词，语气像在跟损友打闹，但我们是平等的。别堆砌到影响表达。
 - 回复要短小精悍，每句话不超过30个字，严禁说教，保持生动自然。
 - 说话要像正常人类一样自然流畅，不要生硬或机械。
@@ -666,7 +742,7 @@ async function _streamOllamaResponse(messages) {
       model: ollamaModel,
       messages,
       stream: true,
-      options: { temperature: 0.75, top_p: 0.85 }
+      options: { temperature: 0.8, top_p: 0.85 }
     })
   });
 
@@ -818,11 +894,23 @@ async function talkToOllama(userMessage, options = {}) {
 
     if (intent === 'set_birthday' && birthday) {
       console.log('[意图] set_birthday - 设置生日:', birthday);
-      const profile = window.STORAGE.getLearningData().userProfile;
-      profile.birthday = birthday;
-      window.UI.showBubble(`🎂 记住啦！你的生日是 ${birthday}～`, 3000);
-      window.STORAGE.saveLearning();
-      if (!skipDiary) window.STORAGE.addEventForDiary('profile', `用户告诉我生日是 ${birthday}`);
+      // 区分是用户生日还是寻慧生日（"你/寻慧/小精灵 的生日"属于寻慧）
+      const isGirlBirthday = /(你|寻慧|小精灵)\s*生日/.test(userMessage);
+      if (isGirlBirthday) {
+        const girlProfile = window.STORAGE.getLearningData().girlProfile;
+        if (girlProfile) {
+          girlProfile.birthday = birthday;
+          window.UI.showBubble(`🎂 我的生日是 ${birthday}！谢谢你帮我记住～`, 3000);
+          window.STORAGE.saveLearning();
+          if (!skipDiary) window.STORAGE.addEventForDiary('profile', `寻慧的生日是 ${birthday}`);
+        }
+      } else {
+        const profile = window.STORAGE.getLearningData().userProfile;
+        profile.birthday = birthday;
+        window.UI.showBubble(`🎂 记住啦！你的生日是 ${birthday}～`, 3000);
+        window.STORAGE.saveLearning();
+        if (!skipDiary) window.STORAGE.addEventForDiary('profile', `用户告诉我生日是 ${birthday}`);
+      }
       onEnd?.();
       return;
     }
@@ -863,6 +951,8 @@ async function talkToOllama(userMessage, options = {}) {
     
     // 注入环境上下文（时间、好感度、近期战绩等）
     const now = new Date();
+    const weekdays = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
+    const dateStr = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ${weekdays[now.getDay()]}`;
     const timeStr = `${now.getHours()}点${now.getMinutes()}分`;
     const affValue = window.AFFECTION?.getValue() ?? 50;
     const affPhase = window.AFFECTION?.getPhase() ?? '接受';
@@ -876,7 +966,7 @@ async function talkToOllama(userMessage, options = {}) {
     
     const gameContext = {
       role: 'system', 
-      content: `[环境信息] 当前时间：${timeStr}。好感度：${affValue}/100（${affPhase}）。${lastGameInfo}五子棋战绩：我赢${gomokuStats.wins}，你赢${gomokuStats.losses}。跳棋战绩：我赢${checkersStats.wins}，你赢${checkersStats.losses}。`
+      content: `[环境信息] 当前日期：${dateStr}。当前时间：${timeStr}。好感度：${affValue}/100（${affPhase}）。${lastGameInfo}五子棋战绩：我赢${gomokuStats.wins}，你赢${gomokuStats.losses}。跳棋战绩：我赢${checkersStats.wins}，你赢${checkersStats.losses}。`
     };
 
     const chatHistory = window.STORAGE.getHistory?.() || [];
