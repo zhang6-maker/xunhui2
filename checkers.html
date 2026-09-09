@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>跳棋</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #f0e6d2;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            font-family: 'Segoe UI', sans-serif;
+        }
+        canvas {
+            border: 2px solid #8B4513;
+            cursor: pointer;
+            display: block;
+            margin: 10px auto;
+            background: #EEC085;
+        }
+        .buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        button {
+            padding: 6px 16px;
+            font-size: 14px;
+            cursor: pointer;
+            background: #ff99cc;
+            border: none;
+            border-radius: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        button:hover {
+            background: #ff80b3;
+        }
+        .status {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="checkersCanvas" width="360" height="360"></canvas>
+    <div class="status" id="status">你的回合</div>
+    <div class="buttons">
+        <button id="resetBtn">新一局</button>
+        <button id="closeBtn">关闭</button>
+    </div>
+    <script src="checkers.js"></script>
+</body>
+</html>

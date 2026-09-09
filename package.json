@@ -1,0 +1,56 @@
+{
+  "name": "girlpet-v2",
+  "version": "2.0.0",
+  "description": "寻慧 - 桌面小精灵 (重构版)",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "electron": "^41.1.1",
+    "electron-builder": "^26.0.12",
+    "husky": "^9.1.7",
+    "jest": "^30.4.2"
+  },
+  "dependencies": {
+    "@meting/core": "^1.6.1",
+    "docxtemplater": "^3.68.5",
+    "ip2region": "^2.3.0",
+    "node-fetch": "^2.7.0",
+    "pizzip": "^3.2.0",
+    "pptxgenjs": "^4.0.1",
+    "wavefile": "^11.0.0",
+    "whisper-cpp-static": "^0.0.3",
+    "ws": "^8.14.2"
+  },
+  "build": {
+    "appId": "com.xunhui.girlpet.v2",
+    "productName": "寻慧桌面小精灵",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "mobile.html",
+      "gomoku.html",
+      "gomoku.js",
+      "checkers.html",
+      "checkers.js",
+      "images/**/*",
+      "python_portable/**/*",
+      "edge_tts_service.py",
+      "node_modules/**/*",
+      "src/**/*",
+      "libs/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    }
+  }
+}

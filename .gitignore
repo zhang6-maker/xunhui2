@@ -1,0 +1,51 @@
+# 大文件排除（便携版运行时巨无霸，禁止入库，否则 GitHub 单文件 100MB 超限 / 整仓超限）
+Ollama/
+OllamaHome/
+bin/
+python_portable/
+NeteaseCloudMusicApi/
+UserData/
+
+# Node.js 依赖
+node_modules/
+
+# 构建输出
+dist/
+build/
+out/
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+
+# 日志文件
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 编辑器配置
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 环境变量
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 临时文件
+tmp/
+temp/
+
+# 数据库
+*.db
+*.sqlite
+
+# 缓存
+.cache/
+.parcel-cache/_gitlog.txt

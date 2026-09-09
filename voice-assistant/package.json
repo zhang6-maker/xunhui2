@@ -1,0 +1,24 @@
+{
+  "name": "voice-assistant",
+  "version": "1.0.0",
+  "description": "Electron + Vosk + TTS + WebSocket 语音助手骨架",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --inspect"
+  },
+  "keywords": [
+    "electron",
+    "vosk",
+    "tts",
+    "websocket",
+    "voice"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "electron": "^latest",
+    "vosk": "^0.3.32",
+    "ws": "^8.14.2"
+  }
+}

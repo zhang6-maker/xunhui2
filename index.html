@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* http://127.0.0.1:* app: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* http://127.0.0.1:* app:; img-src 'self' app: data: blob:; connect-src * app:; media-src blob: 'self' http://127.0.0.1:* http://localhost:*;">
+  <meta charset="UTF-8">
+  <title>寻慧 - 桌面小精灵 v2</title>
+  <style>
+    * { margin: 0; padding: 0; user-select: none; }
+    body { width: 100vw; height: 100vh; overflow: hidden; background: transparent; }
+    #girl {
+      position: absolute;
+      width: 150px; height: 150px;
+      cursor: pointer;
+      transition: left 0.05s linear, top 0.05s linear;
+    }
+    #bubble {
+      position: absolute;
+      background: white;
+      border-radius: 20px;
+      padding: 8px 15px;
+      border: 1px solid #ccc;
+      box-shadow: 2px 2px 8px rgba(0,0,0,0.2);
+      display: none;
+      max-width: 280px;
+      max-height: 120px;
+      overflow-y: auto;
+      word-wrap: break-word;
+      white-space: normal;
+      font-size: 14px;
+      font-family: 'Segoe UI', 'Noto Sans CJK SC', sans-serif;
+      z-index: 100;
+    }
+    #girl, #bubble, #toggleVisibilityBtn, #customInput, #customInput *, #foodIcon,
+    button, input { -webkit-app-region: no-drag; }
+  </style>
+</head>
+<body>
+  <img id="girl" src="images/idle.gif" alt="寻慧">
+  <div id="bubble"></div>
+
+  <!-- 第三方库 -->
+  <script src="libs/jszip.min.js"></script>
+  <script src="libs/pptxgen.min.js"></script>
+
+  <!-- 核心模块 -->
+  <script src="src/renderer/timerManager.js"></script>
+  <script src="src/renderer/deps.js"></script>
+  <script src="src/renderer/settingsStore.js"></script>
+  <script src="src/renderer/config.js"></script>
+  <script src="src/renderer/storage.js"></script>
+  <script src="src/renderer/reminders.js"></script>
+  <script src="src/renderer/ollamaChecker.js"></script>
+  <script src="src/renderer/tts.js"></script>
+  <script src="src/renderer/ui.js"></script>
+  <script src="src/renderer/settingsPanel.js"></script>
+  <script src="src/renderer/diaryBook.js"></script>
+  <script src="src/renderer/state.js"></script>
+  <script src="src/renderer/actions.js"></script>
+  <script src="src/renderer/chat.js"></script>
+  <script src="src/renderer/affection.js"></script>
+  <script src="src/renderer/game.js"></script>
+  <script src="src/renderer/voice.js"></script>
+  <script src="src/renderer/drag.js"></script>
+  <script src="src/renderer/index.js"></script>
+  <script src="src/renderer/mailbox.js"></script>
+  <script src="libs/qrcode-generator.min.js"></script>
+  <script src="src/renderer/remote.js"></script>
+  <script src="src/renderer/toolsLauncher.js"></script>
+
+  <!-- 食物图标 -->
+  <div id="foodIcon" draggable="true" style="position:fixed;width:50px;height:50px;background:#ff9966;border-radius:50%;display:none;align-items:center;justify-content:center;font-size:30px;cursor:grab;z-index:10001;box-shadow:0 2px 8px rgba(0,0,0,0.2);">🍎</div>
+
+  <!-- 隐身/显示按钮（兼具窗口拖拽） -->
+  <div id="toggleVisibilityBtn" style="position:fixed;bottom:5px;right:5px;width:36px;height:36px;background:rgba(255,255,255,0.7);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;z-index:10004;box-shadow:0 2px 8px rgba(0,0,0,0.2);" title="隐藏/显示寻慧">👁️</div>
+
+  <script>
+  (function() {
+    // 拖动眼睛 = 移动整个 Electron 窗口（move-window IPC，主进程手动 setPosition）
+    // 关键修正（解决“拖动不丝滑 / 一闪一闪 / 有时拖不动”）：
+    //  1) setPointerCapture —— 鼠标移出 320x450 小窗口仍收 pointer 事件，彻底解决“拖不动”。
+    //  2) requestAnimationFrame 节流 —— 把高频 pointermove 合并成每帧一次 setPosition，消除重绘闪烁。
+    //  3) 绝对坐标 —— 按下时取窗口位置 + 鼠标位移算目标，转增量发送，无累积误差，丝滑跟手。
+    // 人物独立移动：直接拖角色精灵本身（drag.js initGirlDrag）。
+    const dragBtn = document.getElementById('toggleVisibilityBtn');
+    if (!dragBtn) return;
+
+    let dragging = false, moved = false, ready = false;
+    let startClientX = 0, startClientY = 0;
+    let initWinX = 0, initWinY = 0;   // pointerdown 时窗口位置
+    let lastX = 0, lastY = 0;         // 上次发给主进程的位置
+    let targetX = 0, targetY = 0;     // 当前帧目标位置
+    let rafId = null;
+
+    function flush() {
+      rafId = null;
+      const dx = targetX - lastX, dy = targetY - lastY;
+      if (dx === 0 && dy === 0) return;
+      lastX = targetX; lastY = targetY;
+      if (window.electronAPI && window.electronAPI.send) {
+        window.electronAPI.send('move-window', dx, dy);
+      }
+    }
+
+    dragBtn.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      dragging = true; moved = false; ready = false;
+      startClientX = e.clientX; startClientY = e.clientY;
+      dragBtn.style.cursor = 'grabbing';
+      try { dragBtn.setPointerCapture(e.pointerId); } catch (_) {}
+      if (window.electronAPI && window.electronAPI.invoke) {
+        window.electronAPI.invoke('get-window-position').then((p) => {
+          initWinX = p.x; initWinY = p.y;
+          lastX = p.x; lastY = p.y;
+          targetX = p.x; targetY = p.y;
+          ready = true;
+        }).catch(() => { ready = true; });
+      } else { ready = true; }
+    });
+
+    dragBtn.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      if (!ready) { startClientX = e.clientX; startClientY = e.clientY; return; }
+      if (Math.abs(e.clientX - startClientX) > 2 || Math.abs(e.clientY - startClientY) > 2) moved = true;
+      targetX = initWinX + (e.clientX - startClientX);
+      targetY = initWinY + (e.clientY - startClientY);
+      if (rafId === null) rafId = requestAnimationFrame(flush);
+    });
+
+    function endDrag(e) {
+      if (!dragging) return;
+      dragging = false;
+      dragBtn.style.cursor = 'pointer';
+      try { dragBtn.releasePointerCapture(e.pointerId); } catch (_) {}
+      if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; flush(); }
+    }
+    dragBtn.addEventListener('pointerup', endDrag);
+    dragBtn.addEventListener('pointercancel', endDrag);
+
+    // 拖拽后抑制“隐藏/显示”的 click，避免移动窗口时顺带切换显隐
+    dragBtn.addEventListener('click', (e) => {
+      if (moved) { e.stopImmediatePropagation(); e.preventDefault(); moved = false; }
+    }, true);
+  })();
+  </script>
+</body>
+</html>

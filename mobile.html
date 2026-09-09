@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>寻慧遥控器</title>
+    <meta name="theme-color" content="#ff99cc">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="寻慧遥控">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <style>
+        body { background: #f0f0f0; font-family: system-ui; padding: 20px; max-width: 600px; margin: 0 auto; }
+        button { background: #ff99cc; border: none; padding: 12px 20px; margin: 8px; border-radius: 30px; font-size: 16px; cursor: pointer; }
+        .action-buttons { display: flex; flex-wrap: wrap; justify-content: center; margin: 20px 0; }
+        .chat-area { background: white; border-radius: 20px; padding: 15px; margin-top: 20px; }
+        input { width: 70%; padding: 10px; border-radius: 30px; border: 1px solid #ccc; }
+        .status { text-align: center; color: green; margin: 10px; }
+        #chatLog {
+            background: #fff;
+            border-radius: 15px;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+            margin-top: 20px;
+            border: 1px solid #ddd;
+        }
+        .msg-user { text-align: right; color: blue; margin: 5px; }
+        .msg-assistant { text-align: left; color: green; margin: 5px; }
+        .msg-system { text-align: center; color: gray; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <h2>🐣 寻慧遥控器</h2>
+    <div class="status" id="status">⚡ 连接中...</div>
+    <div class="action-buttons">
+        <button onclick="sendAction('feed')">🍎 喂食</button>
+        <button onclick="sendAction('work')">💻 工作</button>
+        <button onclick="sendAction('sleep')">😴 睡觉</button>
+        <button onclick="sendAction('play')">🎈 玩耍</button>
+        <button onclick="sendAction('gomoku')">🎲 五子棋</button>
+        <button onclick="sendAction('checkers')">🎲 跳棋</button>
+    </div>
+    <div class="chat-area">
+        <input type="text" id="chatInput" placeholder="对寻慧说句话...">
+        <button onclick="sendChat()">发送</button>
+    </div>
+    <div id="chatLog">
+        <div class="msg-system">✨ 连接后即可与寻慧聊天</div>
+    </div>
+    <script>
+        let ws = null;
+        const statusDiv = document.getElementById('status');// 状态栏
+        const chatInput = document.getElementById('chatInput');// 输入框
+        const chatLog = document.getElementById('chatLog');// 聊天记录
+
+        let PC_IP = null; // 电脑 IP 地址
+        let PC_TOKEN = ''; // 访问令牌（WebSocket 鉴权用）
+        let reconnectAttempts = 0;
+        let reconnectTimer = null;
+        // 先从主进程 HTTP 服务拿局域网 IP 和访问令牌
+        fetch('/ip')
+            .then(res => res.json())
+            .then(data => {
+                PC_IP = data.ip || '127.0.0.1';
+                PC_TOKEN = data.token || '';
+                connectWebSocket();
+            })
+            .catch(() => {
+                PC_IP = '127.0.0.1'; // 失败时用本机地址兜底
+                PC_TOKEN = '';
+                connectWebSocket();
+            });
+        // 注册 Service Worker，支持“添加到主屏幕”
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').catch(() => {});
+        }
+
+        function addMessage(text, type = 'assistant') {
+            const div = document.createElement('div');
+            div.className = `msg-${type}`;
+            div.innerText = (type === 'user' ? '👩 我：' : '🐣 寻慧：') + text;
+            chatLog.appendChild(div);
+            div.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // 在 mobile.html 里，替换 connectWebSocket 函数
+        //let reconnectAttempts = 0;
+        //let reconnectTimer = null;
+        
+        function connectWebSocket() {
+
+            const WS_URL = `ws://${PC_IP}:8083?token=${encodeURIComponent(PC_TOKEN)}`;
+            if (reconnectTimer) clearTimeout(reconnectTimer);
+            
+            ws = new WebSocket(WS_URL);
+            
+            ws.onopen = () => { 
+                statusDiv.innerText = '✅ 已连接到电脑'; 
+                statusDiv.style.color = 'green';
+                addMessage('连接成功！', 'system');
+                reconnectAttempts = 0; // 重置重试计数
+            };
+            
+            ws.onclose = () => { 
+                statusDiv.innerText = '❌ 连接断开，正在重连...'; 
+                statusDiv.style.color = 'red';
+                addMessage('连接断开，自动重连中...', 'system');
+                
+                // 指数退避重连：等 1秒、2秒、4秒、最多 10秒
+                const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000);
+                reconnectAttempts++;
+                reconnectTimer = setTimeout(connectWebSocket, delay);
+            };
+            
+            ws.onerror = () => { 
+                statusDiv.innerText = '⚠️ 连接错误';
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'reply') {
+                        addMessage(data.text, 'assistant');
+                    }
+                } catch(e) {}
+            };
+        }
+
+        function sendAction(action, text = '') {
+            if (!ws || ws.readyState !== WebSocket.OPEN) { alert('未连接'); return; }
+            const msg = { action: action };
+            if (text) msg.text = text;
+            ws.send(JSON.stringify(msg));
+            if (action === 'talk' && text) {
+                addMessage(text, 'user');
+            } else {
+                let actionName = { feed:'喂食', work:'工作', sleep:'睡觉', play:'玩耍', gomoku:'五子棋', checkers:'跳棋' }[action] || action;
+                addMessage(`📱 发送指令：${actionName}`, 'system');
+            }
+        }
+
+        function sendChat() {
+            const text = chatInput.value.trim();
+            if (!text) return;
+            sendAction('talk', text);
+            chatInput.value = '';
+        }
+
+        //connectWebSocket();
+    </script>
+</body>
+</html>
