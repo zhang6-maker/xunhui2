@@ -438,24 +438,7 @@ async function _interceptBuiltinCommands(userMessage, options) {
     return true;
   }
 
-  // 音乐播放
-  const musicMatch = userMessage.match(/(播放|放|来一首|来段)\s*(.+?)(音乐|歌|歌曲)?$/i);
-  if (musicMatch?.[2]) {
-    const songQuery = musicMatch[2].trim().replace(/(音乐|歌|歌曲)$/, '');
-    if (songQuery) {
-      await window.ACTIONS.playMusicOnline(songQuery);
-      onEnd?.();
-      return true;
-    }
-  }
-
-  // 停止音乐
-  if (/(停止音乐|别唱了|关掉音乐|停歌|闭嘴吧|别放了)/.test(userMessage)) {
-    window.ACTIONS.stopCurrentMusic();
-    window.UI.showBubble('😤 吵死了，关掉了！', 1500);
-    onEnd?.();
-    return true;
-  }
+  // （音乐播放 / 停止音乐 功能已移除）
 
   // 搜索
   const searchMatch = userMessage.match(/^(搜索|查一下|百度|谷歌|搜一下|查找)[\s：:]*(.+)/i);

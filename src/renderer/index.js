@@ -55,16 +55,6 @@ async function init() {
   // 点击事件
   girl.addEventListener('click', _onGirlClick);
 
-  // 拖拽文件（模板）
-  document.body.addEventListener('dragover', e => e.preventDefault());
-  document.body.addEventListener('drop', async (e) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file?.path?.toLowerCase().endsWith('.pptx')) {
-      await window.ACTIONS.receiveTemplate(file.path);
-    }
-  });
-
   // 初始状态
   window.STATE.setState('idle');
   window.STATE.updatePosition();

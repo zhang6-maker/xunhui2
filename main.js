@@ -8,7 +8,6 @@ const url = require('url');
 const WebSocket = require('ws');
 
 // ==================== 模块引入 ====================
-const { generatePPTContent, fillPPTTemplate } = require('./src/main/pptGenerator');
 const { createWebSocketServer, getWss, setAccessToken, broadcast } = require('./src/main/websocketServer');
 
 // ==================== 全局变量 ====================
@@ -448,115 +447,6 @@ ipcMain.on('mailbox-ensure', (event) => {
   }
 });
 
-// ==================== 模板管理 IPC ====================
-ipcMain.handle('save-template', async (event, templateData) => {
-  try {
-    const templatesDir = path.join(os.homedir(), '.girlpet_templates');
-    if (!fs.existsSync(templatesDir)) {
-      fs.mkdirSync(templatesDir, { recursive: true });
-    }
-
-    const fileName = `${Date.now()}_template.pptx`;
-    const filePath = path.join(templatesDir, fileName);
-    fs.writeFileSync(filePath, Buffer.from(templateData, 'base64'));
-
-    return { success: true, path: filePath };
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
-});
-
-ipcMain.handle('get-templates', async () => {
-  try {
-    const templatesDir = path.join(os.homedir(), '.girlpet_templates');
-    if (!fs.existsSync(templatesDir)) {
-      return { success: true, templates: [] };
-    }
-
-    const files = fs.readdirSync(templatesDir).filter(f => f.endsWith('.pptx'));
-    const templates = files.map(f => ({
-      name: f,
-      path: path.join(templatesDir, f),
-      size: fs.statSync(path.join(templatesDir, f)).size
-    }));
-
-    return { success: true, templates };
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
-});
-
-ipcMain.handle('delete-template', async (event, templatePath) => {
-  try {
-    if (fs.existsSync(templatePath)) {
-      fs.unlinkSync(templatePath);
-    }
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
-});
-
-// ==================== PPT 模板选择 IPC ====================
-ipcMain.handle('select-ppt-template', async () => {
-  try {
-    const result = await dialog.showOpenDialog({
-      properties: ['openFile'],
-      filters: [{ name: 'PPT Templates', extensions: ['pptx'] }],
-      defaultPath: path.join(os.homedir(), '.girlpet_templates')
-    });
-    
-    if (result.canceled || !result.filePaths.length) {
-      return { success: false, error: '用户取消选择' };
-    }
-    
-    return { success: true, path: result.filePaths[0] };
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
-});
-
-ipcMain.handle('select-ppt-file', async () => {
-  try {
-    const result = await dialog.showOpenDialog({
-      properties: ['openFile'],
-      filters: [{ name: 'PPT Files', extensions: ['pptx'] }]
-    });
-    
-    if (result.canceled || !result.filePaths.length) {
-      return { success: false, error: '用户取消选择' };
-    }
-    
-    return { success: true, path: result.filePaths[0] };
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
-});
-
-// ==================== PPT 生成 IPC ====================
-// 生成幻灯片数据（调用 AI）
-ipcMain.handle('generate-ppt-content', async (event, { topic, ollamaUrl }) => {
-  try {
-    const slides = await generatePPTContent(topic, ollamaUrl);
-    return slides;
-  } catch (err) {
-    console.error('[PPT] 生成内容失败:', err);
-    return [
-      { title: topic, body: '内容生成失败，请检查 Ollama 服务', points: ['重试', '检查网络'] }
-    ];
-  }
-});
-
-// 填充PPT模板
-ipcMain.handle('fill-ppt-template', async (event, { templatePath, topic, slides }) => {
-  try {
-    const outputPath = await fillPPTTemplate(templatePath, topic, slides, app.isPackaged, __dirname);
-    return outputPath;
-  } catch (err) {
-    console.error('[PPT] 填充模板失败:', err);
-    throw new Error('PPT 生成失败: ' + err.message);
-  }
-});
 
 // ==================== 语音录音 API ====================
 let recordingFilePath = '';

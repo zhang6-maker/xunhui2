@@ -8,15 +8,10 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 // ==================== IPC 通道白名单 ====================
 const ALLOWED_INVOKE_CHANNELS = new Set([
-  'get-templates',
-  'save-template',
-  'delete-template',
-  'select-best-template',
+  // 已移除：PPT 模板/生成相关通道(get-templates / save-template / delete-template /
+  // select-best-template / generate-ppt-content / fill-ppt-template /
+  // select-ppt-template / select-ppt-file) 与音乐搜索通道(search-and-play-song)
   'get-user-data-path',
-  'generate-ppt-content',
-  'fill-ppt-template',
-  'select-ppt-template',
-  'select-ppt-file',
   'transcribe-audio',
   'shell-open-external',
   'os-totalmem',
@@ -24,7 +19,6 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
   'fs-writeFile',
   'mailbox-ensure',
   'get-remote-url',
-  'search-and-play-song',
   'start-recording',
   'stop-recording',
   'check-recording',
@@ -109,10 +103,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return ipcRenderer.sendSync('fs-readdir', dirPath);
   },
 
-  mailboxEnsure: () => ipcRenderer.sendSync('mailbox-ensure'),
-
-  // ---------- 音乐搜索 ----------
-  searchSong: (songName) => ipcRenderer.invoke('search-and-play-song', songName)
+  mailboxEnsure: () => ipcRenderer.sendSync('mailbox-ensure')
+  // 已移除：音乐搜索 searchSong（通道 search-and-play-song 随音乐功能删除）
 });
 
 // 安全增强

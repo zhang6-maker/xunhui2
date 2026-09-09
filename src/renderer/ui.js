@@ -184,7 +184,6 @@ function createCustomInput() {
         <div style="display: flex; gap: 8px; align-items: center;">
             <input type="text" id="customInputText" placeholder="工作、睡觉、玩、几点了、搜索 天气..." style="flex: 1; padding: 6px 10px; border-radius: 20px; border: none; font-size: 14px; outline: none;">
             <button id="voiceInputBtn" style="background: #ff99cc; border: none; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 16px; display: inline-flex; align-items: center; justify-content: center;">🎤</button>
-            <button id="uploadTemplateBtn" style="background: #ff99cc; border: none; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 16px; display: inline-flex; align-items: center; justify-content: center; margin-left: 4px;" title="上传PPT模板">📎</button>
         </div>
         <div style="margin-top: 8px; text-align: right;">
             <button id="customInputOk" style="background: #ff99cc; border: none; padding: 4px 14px; border-radius: 20px; margin-right: 6px; cursor: pointer; font-size: 12px;">发送</button>
@@ -326,9 +325,6 @@ function createCustomInput() {
         if (e.key === 'Enter') document.getElementById('customInputOk').click();
     });
     document.getElementById('voiceInputBtn').addEventListener('click', window.VOICE.startVoiceInput);
-    document.getElementById('uploadTemplateBtn').addEventListener('click', () => {
-        window.ACTIONS.selectAndReceiveTemplate();
-    });
 
     const settingsTrigger = document.getElementById('settingsTrigger');
     if (settingsTrigger) {

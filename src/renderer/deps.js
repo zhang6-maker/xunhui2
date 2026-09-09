@@ -67,7 +67,6 @@ window.DEPENDENCIES = {
   fs,
   path,
   os,
-  get PptxGenJS() { return window.PptxGenJS; },
   get girl()   { return _girl   || (_girl   = document.getElementById('girl')); },
   get bubble() { return _bubble || (_bubble = document.getElementById('bubble')); }
 };
