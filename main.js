@@ -134,7 +134,9 @@ function createWindow() {
   });
 
   win.loadURL('app://index.html');
-  win.webContents.openDevTools();
+  // 不再自动打开开发者工具（每次启动都要手动关，很烦）
+  // 需要调试时：把下面这行的注释去掉，或在窗口里按 Ctrl+Shift+I / F12 手动打开
+  // win.webContents.openDevTools();
 
   win.on('closed', () => {
     win = null;
@@ -292,7 +294,8 @@ function createGomokuWindow() {
   });
 
   gomokuWin.loadURL(`file://${__dirname}/gomoku.html`);
-  gomokuWin.webContents.openDevTools();
+  // 不再自动打开开发者工具，需要时手动 Ctrl+Shift+I
+  // gomokuWin.webContents.openDevTools();
 
   gomokuWin.on('closed', () => {
     gomokuWin = null;
@@ -319,7 +322,8 @@ function createCheckersWindow() {
   });
 
   checkersWin.loadURL(`file://${__dirname}/checkers.html`);
-  checkersWin.webContents.openDevTools();
+  // 不再自动打开开发者工具，需要时手动 Ctrl+Shift+I
+  // checkersWin.webContents.openDevTools();
 
   checkersWin.on('closed', () => {
     checkersWin = null;
