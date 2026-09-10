@@ -4,6 +4,7 @@
 let currentEmotionType = null;
 let emotionTimer = null;
 let customInputDiv = null;
+let uiAttachments = []; // 📎 用户选择的图片/文档（仅在输入框打开期间有效）
 
 // 计算气泡最佳位置，尽量避免遮挡 girl 元素
 function getBestBubblePosition(girl, bubble) {
@@ -177,6 +178,7 @@ function createCustomInput() {
             <span>💬 对寻慧说：</span>
             <span id="inputHeaderTools" style="display: flex; gap: 12px;">
                 <span id="memoryUsage" style="font-size:11px; opacity:0.7; margin-right:6px;"></span>
+                <span id="attachBtn" title="附带图片/文档" style="cursor:pointer; font-size:18px;">📎</span>
                 <span id="diaryTrigger" title="看日记" style="cursor:pointer; font-size:18px;">📖</span>
                 <span id="settingsTrigger" title="打开设置" style="cursor:pointer; font-size:18px;">⚙️</span>
             </span>
@@ -185,6 +187,7 @@ function createCustomInput() {
             <input type="text" id="customInputText" placeholder="工作、睡觉、玩、几点了、搜索 天气..." style="flex: 1; padding: 6px 10px; border-radius: 20px; border: none; font-size: 14px; outline: none;">
             <button id="voiceInputBtn" style="background: #ff99cc; border: none; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 16px; display: inline-flex; align-items: center; justify-content: center;">🎤</button>
         </div>
+        <div id="attachChips" style="margin-top: 6px; display: none; color: #fff; font-size: 12px;"></div>
         <div style="margin-top: 8px; text-align: right;">
             <button id="customInputOk" style="background: #ff99cc; border: none; padding: 4px 14px; border-radius: 20px; margin-right: 6px; cursor: pointer; font-size: 12px;">发送</button>
             <button id="customInputCancel" style="background: #ccc; border: none; padding: 4px 14px; border-radius: 20px; cursor: pointer; font-size: 12px;">取消</button>
@@ -306,16 +309,19 @@ function createCustomInput() {
 
     document.getElementById('customInputOk').onclick = () => {
         const msg = document.getElementById('customInputText').value.trim();
+        const atts = (window.CHAT && window.CHAT.getAttachments) ? window.CHAT.getAttachments() : [];
         div.style.display = 'none';
         if (div._memoryTimer) {
             clearInterval(div._memoryTimer);
             div._memoryTimer = null;
         }
-        if (msg) window.ACTIONS.handleUserInput(msg);
+        if (msg || atts.length) window.ACTIONS.handleUserInput(msg, atts);
     };
     document.getElementById('customInputCancel').onclick = () => {
         div.style.display = 'none';
         window.STATE.startIdleTimer();
+        if (window.CHAT && window.CHAT.clearAttachments) window.CHAT.clearAttachments();
+        uiAttachments = [];
         if (div._memoryTimer) {
             clearInterval(div._memoryTimer);
             div._memoryTimer = null;
@@ -325,6 +331,58 @@ function createCustomInput() {
         if (e.key === 'Enter') document.getElementById('customInputOk').click();
     });
     document.getElementById('voiceInputBtn').addEventListener('click', window.VOICE.startVoiceInput);
+
+    // ===== 📎 附件选择（图片/文档） =====
+    const chipsEl = div.querySelector('#attachChips');
+    const renderChips = () => {
+        if (!chipsEl) return;
+        if (!uiAttachments.length) { chipsEl.style.display = 'none'; chipsEl.innerHTML = ''; return; }
+        chipsEl.style.display = 'block';
+        chipsEl.innerHTML = uiAttachments.map((a, i) =>
+            `<span style="display:inline-block; background:rgba(255,153,204,0.25); border:1px solid #ff99cc; border-radius:10px; padding:1px 6px; margin:2px;">${a.kind==='unsupported'||a.kind==='error'?'⚠️':'📎'} ${a.name} <span data-idx="${i}" style="cursor:pointer; color:#ff99cc;">✕</span></span>`
+        ).join(' ') + ` <span id="clearAtts" style="cursor:pointer; color:#ccc;">🗑清除</span>`;
+        chipsEl.querySelectorAll('[data-idx]').forEach(el => {
+            el.addEventListener('click', () => {
+                uiAttachments.splice(parseInt(el.getAttribute('data-idx')), 1);
+                if (window.CHAT && window.CHAT.setAttachments) window.CHAT.setAttachments(uiAttachments);
+                renderChips();
+            });
+        });
+        const clearBtn = chipsEl.querySelector('#clearAtts');
+        if (clearBtn) clearBtn.addEventListener('click', () => {
+            uiAttachments = [];
+            if (window.CHAT && window.CHAT.clearAttachments) window.CHAT.clearAttachments();
+            renderChips();
+        });
+    };
+    const attachBtn = div.querySelector('#attachBtn');
+    if (attachBtn) {
+        attachBtn.addEventListener('click', async () => {
+            if (!window.electronAPI || !window.electronAPI.pickFile) {
+                window.UI.showBubble('⚠️ 文件选择不可用', 2000, 'neutral', true);
+                return;
+            }
+            try {
+                const files = await window.electronAPI.pickFile();
+                if (!files || !files.length) return;
+                let warned = false;
+                for (const f of files) {
+                    if (f.kind === 'unsupported' || f.kind === 'error') {
+                        warned = true;
+                        window.UI.showBubble(`⚠️ ${f.name}：${f.error || '不支持'}`, 2500, 'neutral', true);
+                    } else {
+                        uiAttachments.push(f);
+                    }
+                }
+                if (window.CHAT && window.CHAT.setAttachments) window.CHAT.setAttachments(uiAttachments);
+                renderChips();
+                if (uiAttachments.length && !warned) window.UI.showBubble(`📎 已附加 ${uiAttachments.length} 个文件`, 1500, 'neutral', false);
+            } catch (e) {
+                console.warn('[附件] 选择失败:', e);
+                window.UI.showBubble('⚠️ 选择文件失败', 2000, 'neutral', true);
+            }
+        });
+    }
 
     const settingsTrigger = document.getElementById('settingsTrigger');
     if (settingsTrigger) {
@@ -360,6 +418,11 @@ function showCustomInput() {
     customInputDiv.style.display = 'block';
     document.getElementById('customInputText').value = '';
     document.getElementById('customInputText').focus();
+    // 重新打开输入框时清空上次遗留的附件
+    uiAttachments = [];
+    const chips = document.getElementById('attachChips');
+    if (chips) { chips.style.display = 'none'; chips.innerHTML = ''; }
+    if (window.CHAT && window.CHAT.clearAttachments) window.CHAT.clearAttachments();
 }
 
 // ==================== 内心戏气泡 ====================

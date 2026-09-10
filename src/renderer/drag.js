@@ -132,8 +132,9 @@ function startHungerTimer() {
     }
 
     const config = window.CONFIG?.STATE_CONFIG || {};
-    const min = config.hungerMin || 300000;
-    const max = config.hungerMax || 600000;
+    // 自言自语频率：默认 8–14 分钟提醒一次（比原先 5–10 分稍微少一点，不删除自发闲聊）
+    const min = config.hungerMin || 480000;
+    const max = config.hungerMax || 840000;
     const delay = min + Math.random() * (max - min);
 
     hungerTimer = TimerManager.setTimeout('hunger', () => {

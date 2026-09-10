@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, protocol, screen, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, protocol, screen, dialog, desktopCapturer } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');//作用：这行代码让你能在 Node.js 里执行外部系统命令
@@ -76,6 +76,132 @@ ipcMain.on('reply-to-mobile', (event, text) => {
 ipcMain.handle('get-remote-url', () => {
   return 'http://' + getLanIp() + ':8080/mobile';
 });
+
+// 截图：抓取主屏缩略图，返回 PNG 的 base64（供视觉模型识别屏幕内容）
+ipcMain.handle('capture-screen', async () => {
+  try {
+    const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width, height }
+    });
+    if (!sources || !sources.length) return null;
+    // 取面积最大的源（通常是整块主屏）
+    const best = sources.reduce((a, b) => {
+      const sa = a.thumbnail.getSize(), sb = b.thumbnail.getSize();
+      return (sb.width * sb.height) > (sa.width * sa.height) ? b : a;
+    });
+    const png = best.thumbnail.toPNG();
+    return png.toString('base64');
+  } catch (e) {
+    console.error('[capture-screen] 截图失败:', e);
+    return null;
+  }
+});
+
+// 文件选择 + 内容抽取：图片→base64（直接发给视觉模型），文档→文本（作为上下文）
+// 返回数组：{ name, kind:'image'|'doc'|'unsupported'|'error', ext, base64?/text?/error? }
+ipcMain.handle('pick-file', async () => {
+  try {
+    const result = await dialog.showOpenDialog({
+      title: '选择要发给寻慧的图片或文档',
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: '图片与文档', extensions: ['png','jpg','jpeg','gif','webp','bmp','txt','md','markdown','csv','json','pdf','docx'] }
+      ]
+    });
+    if (result.canceled || !result.filePaths || !result.filePaths.length) return [];
+
+    const IMAGE_EXTS = ['png','jpg','jpeg','gif','webp','bmp'];
+    const TEXT_EXTS = ['txt','md','markdown','csv','json','text','yml','yaml','log'];
+    const out = [];
+    for (const fp of result.filePaths) {
+      try {
+        const buf = fs.readFileSync(fp);
+        const name = path.basename(fp);
+        const ext = (path.extname(fp) || '').replace(/^\./, '').toLowerCase();
+        if (IMAGE_EXTS.includes(ext)) {
+          out.push({ name, kind: 'image', ext, base64: buf.toString('base64') });
+        } else if (TEXT_EXTS.includes(ext)) {
+          out.push({ name, kind: 'doc', ext, text: buf.toString('utf-8') });
+        } else if (ext === 'pdf') {
+          out.push({ name, kind: 'doc', ext, text: await extractPdfText(buf) });
+        } else if (ext === 'docx') {
+          out.push({ name, kind: 'doc', ext, text: await extractDocxText(buf) });
+        } else {
+          out.push({ name, kind: 'unsupported', ext, error: '暂不支持的文件类型' });
+        }
+      } catch (e) {
+        out.push({ name: path.basename(fp), kind: 'error', error: String((e && e.message) || e) });
+      }
+    }
+    return out;
+  } catch (e) {
+    console.error('[pick-file] 失败:', e);
+    return [];
+  }
+});
+
+// PDF 文本抽取：优先 pdfjs-dist（Node 主线程 fake worker，仅取文字无需 canvas），
+// 若未安装则降级为正则尽力抽取（仅对文本型 PDF 有效）
+async function extractPdfText(buf) {
+  try {
+    const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
+    const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+    let text = '';
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i);
+      const tc = await page.getTextContent();
+      text += (tc.items || []).map(it => it.str || '').join(' ') + '\n';
+    }
+    return text.trim() || '(PDF 未提取到文字内容，可能是扫描件/图片型 PDF)';
+  } catch (e) {
+    console.warn('[PDF] pdfjs 不可用，尝试正则兜底:', e && e.message);
+    return extractPdfTextFallback(buf);
+  }
+}
+
+// 无依赖兜底：从 content stream 里抽取 ( ... ) 文字串（扫描件/加密件无效）
+function extractPdfTextFallback(buf) {
+  try {
+    const text = buf.toString('latin1');
+    const chunks = [];
+    const streamRe = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
+    let m;
+    while ((m = streamRe.exec(text)) !== null) {
+      const body = m[1];
+      const strRe = /\(((?:\\.|[^()\\])*)\)/g;
+      let s;
+      while ((s = strRe.exec(body)) !== null) {
+        const t = s[1].replace(/\\([nrtbf()\\])/g, (_, c) =>
+          ({ n: '\n', r: '\r', t: '\t', b: '\b', f: '\f', '(': '(', ')': ')', '\\': '\\' }[c] || c));
+        if (t.trim()) chunks.push(t);
+      }
+    }
+    return chunks.join(' ').replace(/\s+/g, ' ').trim() ||
+      '(PDF 为扫描件/加密或结构复杂，内置解析器无法提取文字，建议转成 txt/docx 再发)';
+  } catch (e) {
+    return '(PDF 解析失败：' + String((e && e.message) || e) + ')';
+  }
+}
+
+// DOCX 文本抽取（jszip 解压 word/document.xml，提取 <w:t> 文本）
+async function extractDocxText(buf) {
+  try {
+    const JSZip = require('jszip');
+    const zip = await JSZip.loadAsync(buf);
+    const xml = await zip.file('word/document.xml').async('string');
+    const paras = xml.split('</w:p>');
+    const lines = paras.map(p => {
+      const ts = (p.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g) || [])
+        .map(m => m.replace(/<w:t[^>]*>/, '').replace(/<\/w:t>/, ''));
+      return ts.join('');
+    });
+    return lines.join('\n').trim() || '(DOCX 未提取到文字内容)';
+  } catch (e) {
+    return '(DOCX 解析失败：' + String((e && e.message) || e) + ')';
+  }
+}
 
 // ==================== 窗口管理 ====================
 function createWindow() {

@@ -31,8 +31,8 @@ const STATE_CONFIG = {
     randomPlayMin: 60000,          // 随机玩耍最小间隔（1分钟）
     randomPlayMax: 180000,         // 随机玩耍最大间隔（3分钟）
     innerThoughtChance: 0.25,       // 内心独白概率（25%）
-    hungerMin: 300000,             // 饥饿最小间隔（5分钟）
-    hungerMax: 900000              // 饥饿最大间隔（15分钟）
+    hungerMin: 480000,             // 饥饿最小间隔（8分钟，自言自语频率略微降低）
+    hungerMax: 840000              // 饥饿最大间隔（14分钟）
 };
 
 // 睡眠时间配置

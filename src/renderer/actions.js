@@ -405,7 +405,11 @@ function matchCommand(msg) {
 }
 
 // ==================== 用户输入处理 ====================
-async function handleUserInput(msg) {
+async function handleUserInput(msg, attachments = []) {
+  // 取出并立即清空 📎 附件全局，避免被后续自动闲聊误用；副本留作本次发送
+  const pendingAtts = (attachments && attachments.length) ? attachments.slice() : [];
+  if (window.CHAT && window.CHAT.clearAttachments) window.CHAT.clearAttachments();
+
   // ========== 新增：安静模式指令 ==========
   const silenceMatch = msg.match(/(安静|静音|别吵|闭嘴)[我]?\s*(\d+)\s*(分钟|分|小时|秒)/);
   if (silenceMatch) {
@@ -463,7 +467,7 @@ async function handleUserInput(msg) {
   if (msg.includes('查看日记') || msg.includes('看日记')) { window.UI.handleViewDiary(); return; }
 
 
-  window.CHAT.talkToOllama(msg);
+  window.CHAT.talkToOllama(msg, { attachments: pendingAtts });
 }
 
 // ==================== 游戏 ====================

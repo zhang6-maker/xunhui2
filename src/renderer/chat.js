@@ -852,6 +852,9 @@ function _handlePostReply(fullReply, userMessage, options) {
 }
 
 // ==================== 6. 主入口 ====================
+// 用户通过 📎 主动附带的图片/文档（发送时一次性注入，不污染自动闲聊）
+let pendingAttachments = [];
+
 async function talkToOllama(userMessage, options = {}) {
   const {
     skipLearning = false,
@@ -966,11 +969,58 @@ async function talkToOllama(userMessage, options = {}) {
     
     const gameContext = {
       role: 'system', 
-      content: `[环境信息] 当前日期：${dateStr}。当前时间：${timeStr}。好感度：${affValue}/100（${affPhase}）。${lastGameInfo}五子棋战绩：我赢${gomokuStats.wins}，你赢${gomokuStats.losses}。跳棋战绩：我赢${checkersStats.wins}，你赢${checkersStats.losses}。`
+      content: `[环境信息] 当前日期：${dateStr}。当前时间：${timeStr}。好感度：${affValue}/100（${affPhase}）。${lastGameInfo}五子棋战绩：我赢${gomokuStats.wins}，你赢${gomokuStats.losses}。跳棋战绩：我赢${checkersStats.wins}，你赢${checkersStats.losses}。你具备视觉能力，当用户附上屏幕截图时请结合图片内容回答。`
     };
 
+    // ===== 视觉触发：用户想让我看屏幕时截图并附图 =====
+    let visionImageB64 = null;
+    const VISION_TRIGGER = /(看\s*屏幕|截\s*[图个]|截图|这个\s*(界面|窗口)|当前\s*(界面|窗口)|界面\s*(上|里|显示)|窗口\s*(上|里|显示)|分析.*(屏幕|界面)|屏幕\s*(上|里|显示|内容))/i;
+    if (VISION_TRIGGER.test(userMessage) && window.electronAPI && window.electronAPI.captureScreen) {
+      try {
+        window.UI.showBubble('📸 让我看看屏幕...', 1500, 'neutral', false);
+        visionImageB64 = await window.electronAPI.captureScreen();
+      } catch (e) {
+        console.warn('[视觉] 截图失败:', e);
+      }
+    }
+
+    // ===== 用户主动附带的图片/文档（📎 选择） =====
+    const attachments = (options && Array.isArray(options.attachments)) ? options.attachments : [];
+    const imageB64List = [];
+    const docContexts = [];
+    if (visionImageB64) imageB64List.push(visionImageB64);
+    for (const att of attachments) {
+      if (!att) continue;
+      if (att.kind === 'image' && att.base64) imageB64List.push(att.base64);
+      else if (att.kind === 'doc' && att.text) docContexts.push({ name: att.name || '文档', text: att.text });
+    }
+    const hasMaterial = imageB64List.length > 0 || docContexts.length > 0;
+
     const chatHistory = window.STORAGE.getHistory?.() || [];
-    const messages = [systemPrompt, gameContext, ...chatHistory, { role: 'user', content: userMessage }];
+    const userMsg = { role: 'user', content: userMessage };
+    if (imageB64List.length) userMsg.images = imageB64List;
+
+    if (docContexts.length) {
+      let docBlock = '\n\n[用户附带的文档内容]\n';
+      for (const d of docContexts) {
+        let t = (d.text || '').replace(/\r\n/g, '\n');
+        if (t.length > 6000) t = t.slice(0, 6000) + '\n…（文档过长，仅截取前 6000 字）';
+        docBlock += `文件名：${d.name}\n---\n${t}\n---\n`;
+      }
+      docBlock += '[/文档]';
+      userMsg.content = userMessage + docBlock;
+    }
+
+    // 有素材时，明确锚定模型“先基于材料作答”，但不删除任何自言自语逻辑
+    if (hasMaterial) {
+      const tags = [];
+      if (visionImageB64) tags.push('屏幕截图');
+      if (attachments.some(a => a && a.kind === 'image')) tags.push('图片');
+      if (docContexts.length) tags.push('文档');
+      userMsg.content += `\n\n[已附上：${tags.join('、')}。请先基于这些材料作答；材料不足以回答时，再结合你的角色设定自然补充。不要忽略材料自顾自地扮演。]`;
+    }
+
+    const messages = [systemPrompt, gameContext, ...chatHistory, userMsg];
 
     const fullReply = await _streamOllamaResponse(messages);
 
@@ -1212,5 +1262,9 @@ window.CHAT = {
   talkToOllama,
   triggerInnerThought,
   generateMusing,
-  resetWakeUpCount
+  resetWakeUpCount,
+  // 📎 附件管理：发送时由 ui.js 暂存，handleUserInput 取出后清除
+  setAttachments: (arr) => { pendingAttachments = Array.isArray(arr) ? arr.slice() : []; },
+  getAttachments: () => pendingAttachments.slice(),
+  clearAttachments: () => { pendingAttachments = []; }
 };

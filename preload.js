@@ -22,7 +22,9 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
   'start-recording',
   'stop-recording',
   'check-recording',
-  'get-window-position'
+  'get-window-position',
+  'capture-screen',
+  'pick-file'
 ]);
 
 const ALLOWED_SEND_CHANNELS = new Set([
@@ -52,6 +54,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
     return ipcRenderer.invoke(channel, ...args);
   },
+
+  // 截图：返回当前主屏 PNG 的 base64
+  captureScreen: () => ipcRenderer.invoke('capture-screen'),
+
+  // 文件选择 + 抽取：返回附件数组 [{name,kind,ext,base64?/text?/error?}]
+  pickFile: () => ipcRenderer.invoke('pick-file'),
 
   send(channel, ...args) {
     if (!ALLOWED_SEND_CHANNELS.has(channel)) {

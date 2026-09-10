@@ -9,7 +9,7 @@ const SETTINGS_FILE = PATH.join(OS.homedir(), '.girlpet_settings.json');
 
 const DEFAULT_SETTINGS = {
     ollamaUrl: 'http://localhost:11435',
-    ollamaModel: 'qwen2:7b',
+    ollamaModel: 'qwen3vl-eye',
     ttsUrl: 'http://127.0.0.1:8001/synthesize/',
     ttsVoice: 'zh-CN-XiaoyiNeural',
     sleepTimeHour: 22,
